@@ -36,12 +36,17 @@ from api.utils.audio import prepare_audio_input_for_ai
 from api.utils.file_analysis import extract_submission_file
 from api.db.user import get_user_first_name
 from langfuse import get_client, observe
+from api.prompts import compile_prompt
+from api.prompts.router import ROUTER_SYSTEM_PROMPT, ROUTER_USER_PROMPT
+from api.prompts.rewrite_query import REWRITE_QUERY_SYSTEM_PROMPT, REWRITE_QUERY_USER_PROMPT
+from api.prompts.objective_question import OBJECTIVE_QUESTION_SYSTEM_PROMPT, OBJECTIVE_QUESTION_USER_PROMPT
+from api.prompts.subjective_question import SUBJECTIVE_QUESTION_SYSTEM_PROMPT, SUBJECTIVE_QUESTION_USER_PROMPT
+from api.prompts.doubt_solving import DOUBT_SOLVING_SYSTEM_PROMPT, DOUBT_SOLVING_USER_PROMPT
+from api.prompts.assignment import ASSIGNMENT_SYSTEM_PROMPT, ASSIGNMENT_USER_PROMPT
 
 router = APIRouter()
 
 langfuse = get_client()
-
-LANGFUSE_PROMPT_LABEL = settings.langfuse_tracing_environment
 
 
 def convert_chat_history_to_prompt(chat_history: list[dict]) -> str:
@@ -131,11 +136,9 @@ async def rewrite_query(
     is_root_trace: bool = False,
 ):
     # rewrite query
-    prompt = langfuse.get_prompt(
-        "rewrite-query", type="chat", label=LANGFUSE_PROMPT_LABEL
-    )
-
-    messages = prompt.compile(
+    messages = compile_prompt(
+        REWRITE_QUERY_SYSTEM_PROMPT,
+        REWRITE_QUERY_USER_PROMPT,
         chat_history=convert_chat_history_to_prompt(chat_history),
         reference_material=question_details,
     )
@@ -154,7 +157,6 @@ async def rewrite_query(
         messages=messages,
         response_model=Output,
         max_output_tokens=8192,
-        langfuse_prompt=prompt,
     )
 
     llm_input = f"# Chat History\n\n{convert_chat_history_to_prompt(chat_history)}\n\n# Reference Material\n\n{question_details}"
@@ -169,8 +171,7 @@ async def rewrite_query(
         input=llm_input,
         output=output,
         metadata={
-            "prompt_version": prompt.version,
-            "prompt_name": prompt.name,
+            "prompt_name": "rewrite-query",
             "input": llm_input,
             "output": output,
         },
@@ -199,9 +200,9 @@ async def get_model_for_task(
             description="Whether to use a reasoning model to evaluate the student's response"
         )
 
-    prompt = langfuse.get_prompt("router", type="chat", label=LANGFUSE_PROMPT_LABEL)
-
-    messages = prompt.compile(
+    messages = compile_prompt(
+        ROUTER_SYSTEM_PROMPT,
+        ROUTER_USER_PROMPT,
         task_details=question_details,
     )
 
@@ -212,7 +213,6 @@ async def get_model_for_task(
         messages=messages,
         response_model=Output,
         max_output_tokens=4096,
-        langfuse_prompt=prompt,
     )
 
     use_reasoning_model = router_output.use_reasoning_model
@@ -233,8 +233,7 @@ async def get_model_for_task(
         input=llm_input,
         output=use_reasoning_model,
         metadata={
-            "prompt_version": prompt.version,
-            "prompt_name": prompt.name,
+            "prompt_name": "router",
             "input": llm_input,
             "output": use_reasoning_model,
         },
@@ -637,21 +636,25 @@ async def ai_response_for_question(request: AIChatRequest):
 
                 if question["type"] == QuestionType.OBJECTIVE:
                     prompt_name = "objective-question"
+                    messages = compile_prompt(
+                        OBJECTIVE_QUESTION_SYSTEM_PROMPT,
+                        OBJECTIVE_QUESTION_USER_PROMPT,
+                        task_details=question_details,
+                        user_details=user_details,
+                    )
                 else:
                     prompt_name = "subjective-question"
-
-                prompt = langfuse.get_prompt(
-                    prompt_name, type="chat", label=LANGFUSE_PROMPT_LABEL
-                )
-                messages = prompt.compile(
-                    task_details=question_details,
-                    user_details=user_details,
-                )
+                    messages = compile_prompt(
+                        SUBJECTIVE_QUESTION_SYSTEM_PROMPT,
+                        SUBJECTIVE_QUESTION_USER_PROMPT,
+                        task_details=question_details,
+                        user_details=user_details,
+                    )
             else:
-                prompt = langfuse.get_prompt(
-                    "doubt_solving", type="chat", label=LANGFUSE_PROMPT_LABEL
-                )
-                messages = prompt.compile(
+                prompt_name = "doubt_solving"
+                messages = compile_prompt(
+                    DOUBT_SOLVING_SYSTEM_PROMPT,
+                    DOUBT_SOLVING_USER_PROMPT,
                     reference_material=question_details,
                     user_details=user_details,
                 )
@@ -659,7 +662,7 @@ async def ai_response_for_question(request: AIChatRequest):
             messages += chat_history
 
             with langfuse.start_as_current_observation(
-                as_type="generation", name="response", prompt=prompt
+                as_type="generation", name="response"
             ) as observation:
                 try:
                     async for chunk in stream_llm_with_openai(
@@ -684,10 +687,8 @@ async def ai_response_for_question(request: AIChatRequest):
                     observation.update(
                         input=llm_input,
                         output=llm_output,
-                        prompt=prompt,
                         metadata={
-                            "prompt_version": prompt.version,
-                            "prompt_name": prompt.name,
+                            "prompt_name": prompt_name,
                             **response_metadata,
                         },
                     )
@@ -932,12 +933,9 @@ async def ai_response_for_assignment(request: AIChatRequest):
                     description="Assignment score assigned when evaluating initial file submission"
                 )
 
-            # Get Langfuse prompt for assignment evaluation
-            prompt = langfuse.get_prompt(
-                "assignment", type="chat", label=LANGFUSE_PROMPT_LABEL
-            )
-
-            messages = prompt.compile(
+            messages = compile_prompt(
+                ASSIGNMENT_SYSTEM_PROMPT,
+                ASSIGNMENT_USER_PROMPT,
                 assignment_details=assignment_details,
                 user_details=user_details,
             )
@@ -961,9 +959,8 @@ async def ai_response_for_assignment(request: AIChatRequest):
                 else Output
             )
 
-            # Process streaming response with Langfuse observation
             with langfuse.start_as_current_observation(
-                as_type="generation", name="response", prompt=prompt
+                as_type="generation", name="response"
             ) as observation:
                 try:
                     async for chunk in stream_llm_with_openai(
@@ -988,10 +985,8 @@ async def ai_response_for_assignment(request: AIChatRequest):
                     observation.update(
                         input=llm_input,
                         output=llm_output,
-                        prompt=prompt,
                         metadata={
-                            "prompt_version": prompt.version,
-                            "prompt_name": prompt.name,
+                            "prompt_name": "assignment",
                             **response_metadata,
                         },
                     )

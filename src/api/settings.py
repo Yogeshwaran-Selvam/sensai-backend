@@ -8,6 +8,10 @@ from api.config import UPLOAD_FOLDER_NAME
 root_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = join(root_dir, ".env.aws")
 
+env_file_path = join(root_dir, ".env")
+if os.path.exists(env_file_path):
+    load_dotenv(env_file_path)
+
 if os.path.exists(env_path):
     print(f"Loading environment variables from {env_path}")
     load_dotenv(env_path)
@@ -33,12 +37,7 @@ class Settings(BaseSettings):
     slack_course_created_webhook_url: str | None = None
     slack_usage_stats_webhook_url: str | None = None
     slack_alert_webhook_url: str | None = None
-    langfuse_secret_key: str | None = None
-    langfuse_public_key: str | None = None
-    langfuse_host: str | None = None
-    langfuse_tracing_environment: str | None = None
-
-    model_config = SettingsConfigDict(env_file=join(root_dir, ".env"))
+    model_config = SettingsConfigDict(env_file=join(root_dir, ".env"), extra="ignore")
 
 
 @lru_cache
@@ -47,17 +46,6 @@ def get_settings():
 
 
 settings = get_settings()
-
-if (
-    settings.langfuse_public_key
-    and settings.langfuse_secret_key
-    and settings.langfuse_host
-    and settings.langfuse_tracing_environment
-):
-    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
-    os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
-    os.environ["LANGFUSE_HOST"] = settings.langfuse_host
-    os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = settings.langfuse_tracing_environment
 
 if settings.openai_api_key:
     os.environ["OPENAI_API_KEY"] = settings.openai_api_key
