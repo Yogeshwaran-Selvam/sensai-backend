@@ -32,6 +32,7 @@ from api.config import (
     integrations_table_name,
     assignment_table_name,
     bq_sync_table_name,
+    quiz_generation_configs_table_name,
 )
 from api.db.migration import run_migrations
 
@@ -647,6 +648,30 @@ async def create_code_drafts_table(cursor):
     )
 
 
+async def create_quiz_generation_configs_table(cursor):
+    await cursor.execute(
+        f"""CREATE TABLE IF NOT EXISTS {quiz_generation_configs_table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_title TEXT NOT NULL DEFAULT '',
+                module_title TEXT NOT NULL DEFAULT '',
+                purpose TEXT NOT NULL,
+                length INTEGER NOT NULL,
+                difficulty TEXT NOT NULL,
+                question_type TEXT NOT NULL,
+                answer_type TEXT NOT NULL,
+                topic_weights TEXT,
+                course_id INTEGER NOT NULL,
+                org_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                deleted_at DATETIME,
+                FOREIGN KEY (course_id) REFERENCES {courses_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (org_id) REFERENCES {organizations_table_name}(id) ON DELETE CASCADE
+            )"""
+    )
+
+
 async def init_db():
     # Ensure the database folder exists
     db_folder = os.path.dirname(sqlite_db_path)
@@ -709,6 +734,8 @@ async def init_db():
             await create_assignment_table(cursor)
 
             await create_bq_sync_table(cursor)
+
+            await create_quiz_generation_configs_table(cursor)
 
             await conn.commit()
 
