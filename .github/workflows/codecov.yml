@@ -1,0 +1,52 @@
+name: Code Coverage
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+  push:
+    branches: ["main"]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest tests/ --cov=src --cov-report=xml --cov-report=term --cov-config=pytest.ini
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: true
+          verbose: true 
+
+      - name: Notify Slack on Failure (main branch only)
+        if: failure() && github.ref == 'refs/heads/main'
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          webhook: ${{ secrets.SLACK_ALERT_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "<!channel> ❌ *backend*: Code coverage workflow failed on main branch! Please check the GitHub Actions logs for details.\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
