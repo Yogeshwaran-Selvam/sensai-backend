@@ -799,3 +799,23 @@ class UpdateIntegrationRequest(BaseModel):
     access_token: str | None = None
     refresh_token: str | None = None
     expires_at: datetime | None = None
+
+
+class ExtractKeywordsResponse(BaseModel):
+    keywords: List[str]
+
+
+class MilestoneKeywordsResponse(BaseModel):
+    milestone_id: int
+    keywords: List[str]
+
+
+class JobDescription(BaseModel):
+    title: str
+    description: str
+    responsibilities: List[str]
+    skills: List[str]
+
+
+class JobDescriptionResponse(BaseModel):
+    jobs: List[JobDescription]

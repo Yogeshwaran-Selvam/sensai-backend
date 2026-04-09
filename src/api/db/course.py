@@ -1006,3 +1006,161 @@ async def get_user_courses(user_id: int) -> List[Dict]:
                 courses.append(course_dict)
 
         return courses
+
+
+async def get_all_task_content_for_milestone(
+    course_id: int, milestone_id: int
+) -> str:
+    """Fetch all task content (learning materials, quiz questions, assignments) for a milestone
+    and return as combined plain text."""
+    from api.db.utils import construct_description_from_blocks
+
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+
+        # Get all tasks for this milestone in this course
+        await cursor.execute(
+            f"""SELECT t.id, t.type, t.title, t.blocks
+                FROM {course_tasks_table_name} ct
+                JOIN {tasks_table_name} t ON ct.task_id = t.id
+                WHERE ct.course_id = ? AND ct.milestone_id = ?
+                AND t.deleted_at IS NULL AND ct.deleted_at IS NULL
+                ORDER BY ct.ordering""",
+            (course_id, milestone_id),
+        )
+        tasks = await cursor.fetchall()
+
+        all_content_parts = []
+
+        for task in tasks:
+            task_id, task_type, task_title, task_blocks = task
+
+            all_content_parts.append(f"## {task_title}")
+
+            # Learning material: extract from blocks
+            if task_type == TaskType.LEARNING_MATERIAL and task_blocks:
+                blocks = json.loads(task_blocks)
+                text = construct_description_from_blocks(blocks)
+                if text.strip():
+                    all_content_parts.append(text)
+
+            # Quiz: extract question text and answers
+            elif task_type == TaskType.QUIZ:
+                await cursor.execute(
+                    f"""SELECT q.title, q.blocks, q.answer
+                        FROM {questions_table_name} q
+                        WHERE q.task_id = ? AND q.deleted_at IS NULL
+                        ORDER BY q.position""",
+                    (task_id,),
+                )
+                questions = await cursor.fetchall()
+                for q_title, q_blocks, q_answer in questions:
+                    if q_title:
+                        all_content_parts.append(f"### {q_title}")
+                    if q_blocks:
+                        q_blocks_parsed = json.loads(q_blocks)
+                        text = construct_description_from_blocks(q_blocks_parsed)
+                        if text.strip():
+                            all_content_parts.append(text)
+                    if q_answer:
+                        answer_parsed = json.loads(q_answer)
+                        answer_text = construct_description_from_blocks(answer_parsed)
+                        if answer_text.strip():
+                            all_content_parts.append(answer_text)
+
+            # Assignment: extract from assignment blocks
+            elif task_type == TaskType.ASSIGNMENT:
+                from api.config import assignment_table_name
+
+                await cursor.execute(
+                    f"""SELECT blocks FROM {assignment_table_name}
+                        WHERE task_id = ? AND deleted_at IS NULL""",
+                    (task_id,),
+                )
+                assignment = await cursor.fetchone()
+                if assignment and assignment[0]:
+                    a_blocks = json.loads(assignment[0])
+                    text = construct_description_from_blocks(a_blocks)
+                    if text.strip():
+                        all_content_parts.append(text)
+
+        return "\n\n".join(all_content_parts)
+
+
+async def save_keywords_for_milestone(milestone_id: int, keywords: list) -> None:
+    """Save extracted keywords for a milestone."""
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+        await cursor.execute(
+            f"UPDATE {milestones_table_name} SET keywords = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (json.dumps(keywords), milestone_id),
+        )
+        await conn.commit()
+
+
+async def get_keywords_for_milestone(milestone_id: int) -> list:
+    """Get stored keywords for a milestone."""
+    result = await execute_db_operation(
+        f"SELECT keywords FROM {milestones_table_name} WHERE id = ? AND deleted_at IS NULL",
+        (milestone_id,),
+        fetch_one=True,
+    )
+    if result and result[0]:
+        return json.loads(result[0])
+    return []
+
+
+async def get_top_courses_with_keywords(org_id: int, limit: int = 3) -> list:
+    """Get top courses (by task count) for an org, along with their aggregated milestone keywords."""
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+
+        # Get courses ranked by number of tasks
+        await cursor.execute(
+            f"""SELECT c.id, c.name, COUNT(ct.id) as task_count
+                FROM {courses_table_name} c
+                LEFT JOIN {course_tasks_table_name} ct
+                    ON c.id = ct.course_id AND ct.deleted_at IS NULL
+                LEFT JOIN {tasks_table_name} t
+                    ON ct.task_id = t.id AND t.deleted_at IS NULL
+                WHERE c.org_id = ? AND c.deleted_at IS NULL
+                GROUP BY c.id
+                ORDER BY task_count DESC
+                LIMIT ?""",
+            (org_id, limit),
+        )
+        courses = await cursor.fetchall()
+
+        result = []
+        for course_id, course_name, _ in courses:
+            # Get all keywords from milestones of this course
+            await cursor.execute(
+                f"""SELECT m.keywords
+                    FROM {course_milestones_table_name} cm
+                    JOIN {milestones_table_name} m ON cm.milestone_id = m.id
+                    WHERE cm.course_id = ? AND cm.deleted_at IS NULL
+                    AND m.deleted_at IS NULL AND m.keywords IS NOT NULL""",
+                (course_id,),
+            )
+            rows = await cursor.fetchall()
+            all_keywords = []
+            for row in rows:
+                if row[0]:
+                    all_keywords.extend(json.loads(row[0]))
+
+            # Deduplicate while preserving order
+            seen = set()
+            unique_keywords = []
+            for kw in all_keywords:
+                kw_lower = kw.lower()
+                if kw_lower not in seen:
+                    seen.add(kw_lower)
+                    unique_keywords.append(kw)
+
+            result.append({
+                "id": course_id,
+                "name": course_name,
+                "keywords": unique_keywords,
+            })
+
+        return result

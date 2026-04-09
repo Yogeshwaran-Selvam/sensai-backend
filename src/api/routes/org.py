@@ -20,6 +20,7 @@ from api.models import (
     AddUsersToOrgRequest,
     UpdateOrgRequest,
     UpdateOrgOpenaiApiKeyRequest,
+    JobDescriptionResponse,
 )
 
 router = APIRouter()
@@ -91,3 +92,51 @@ async def get_org_members(org_id: int) -> List[Dict]:
 @router.get("/")
 async def get_all_orgs() -> List[Dict]:
     return await get_all_orgs_from_db()
+
+
+@router.get("/{org_id}/job-descriptions", response_model=JobDescriptionResponse)
+async def get_job_descriptions(org_id: int):
+    from api.db.course import get_top_courses_with_keywords
+    from api.config import openai_plan_to_model_name
+    from api.llm import run_llm_with_openai
+    from api.prompts import compile_prompt
+    from api.prompts.job_description import (
+        JOB_DESCRIPTION_SYSTEM_PROMPT,
+        JOB_DESCRIPTION_USER_PROMPT,
+    )
+
+    courses = await get_top_courses_with_keywords(org_id, limit=3)
+
+    # Build course keywords text for the prompt
+    course_keyword_parts = []
+    for course in courses:
+        if course["keywords"]:
+            keywords_str = ", ".join(course["keywords"])
+            course_keyword_parts.append(
+                f"Course: {course['name']}\nKeywords: {keywords_str}"
+            )
+
+    if not course_keyword_parts:
+        raise HTTPException(
+            status_code=400,
+            detail="No course keywords found. Add content to courses and let keywords be extracted first.",
+        )
+
+    course_keywords_text = "\n\n".join(course_keyword_parts)
+
+    messages = compile_prompt(
+        JOB_DESCRIPTION_SYSTEM_PROMPT,
+        JOB_DESCRIPTION_USER_PROMPT,
+        course_keywords=course_keywords_text,
+    )
+
+    model = openai_plan_to_model_name["text-mini"]
+
+    result = await run_llm_with_openai(
+        model=model,
+        messages=messages,
+        response_model=JobDescriptionResponse,
+        max_output_tokens=4096,
+    )
+
+    return result
