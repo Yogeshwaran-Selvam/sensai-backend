@@ -801,6 +801,7 @@ class UpdateIntegrationRequest(BaseModel):
     expires_at: datetime | None = None
 
 
+
 # ============================================================
 # Bloom's Taxonomy Assessment Intelligence Engine Models
 # ============================================================
@@ -881,3 +882,63 @@ class JobDescription(BaseModel):
 
 class JobDescriptionResponse(BaseModel):
     jobs: List[JobDescription]
+
+# --- Quiz Generation ---
+
+
+class QuizGenerationPurpose(str, Enum):
+    practice = "practice"
+    exam = "exam"
+
+
+class QuizGenerationDifficulty(str, Enum):
+    easy = "easy"
+    medium = "medium"
+    hard = "hard"
+
+
+class QuizGenQuestionType(str, Enum):
+    objective = "objective"
+    subjective = "subjective"
+
+
+class QuizGenAnswerType(str, Enum):
+    mcq = "mcq"
+    fill_in_the_blanks = "fill_in_the_blanks"
+    short_answer = "short_answer"
+    long_answer = "long_answer"
+    code = "code"
+
+
+class TopicWeight(BaseModel):
+    keyword: str
+    weight: float  # 0-100
+
+
+class CreateQuizGenerationRequest(BaseModel):
+    course_title: str
+    module_title: str
+    purpose: QuizGenerationPurpose
+    length: int  # 10, 15, 20
+    difficulty: QuizGenerationDifficulty
+    question_type: QuizGenQuestionType
+    answer_type: QuizGenAnswerType
+    topic_weights: List[TopicWeight]
+    course_id: int
+    org_id: int
+
+
+class QuizGenerationResponse(BaseModel):
+    id: int
+    course_title: str
+    module_title: str
+    purpose: str
+    length: int
+    difficulty: str
+    question_type: str
+    answer_type: str
+    topic_weights: List[TopicWeight]
+    course_id: int
+    org_id: int
+    status: str
+    created_at: str

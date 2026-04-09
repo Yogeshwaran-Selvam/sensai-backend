@@ -27,6 +27,7 @@ from api.config import (
     code_drafts_table_name,
     integrations_table_name,
     assignment_table_name,
+    quiz_generation_configs_table_name,
 )
 
 
@@ -247,6 +248,41 @@ async def add_keywords_column_to_milestones():
         await conn.commit()
 
 
+async def create_or_recreate_quiz_generation_configs():
+    from api.db import create_quiz_generation_configs_table
+
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+        await cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (quiz_generation_configs_table_name,),
+        )
+        existing = await cursor.fetchone()
+
+        if existing:
+            await cursor.execute(f"PRAGMA table_info({quiz_generation_configs_table_name})")
+            columns = [col[1] for col in await cursor.fetchall()]
+
+            # Add missing columns using ALTER TABLE (safe for existing data)
+            columns_to_add = [
+                ("course_title", "TEXT NOT NULL DEFAULT ''"),
+                ("module_title", "TEXT NOT NULL DEFAULT ''"),
+                ("question_type", "TEXT NOT NULL DEFAULT ''"),
+                ("answer_type", "TEXT NOT NULL DEFAULT ''"),
+            ]
+            for col_name, col_def in columns_to_add:
+                if col_name not in columns:
+                    await cursor.execute(
+                        f"ALTER TABLE {quiz_generation_configs_table_name} ADD COLUMN {col_name} {col_def}"
+                    )
+
+            await conn.commit()
+        else:
+            await create_quiz_generation_configs_table(cursor)
+            await conn.commit()
+
+
 async def run_migrations():
     await cleanup_invalid_chat_history()
     await add_keywords_column_to_milestones()
+    await create_or_recreate_quiz_generation_configs()

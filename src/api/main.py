@@ -27,6 +27,7 @@ from api.routes import (
     scorecard,
     integration,
     assessment,
+    quiz_generation,
 )
 
 # from api.routes.ai import (
@@ -136,6 +137,7 @@ app.include_router(hva.router, prefix="/hva", tags=["hva"])
 app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
 app.include_router(integration.router, prefix="/integrations", tags=["integrations"])
 app.include_router(assessment.router, prefix="/assessment", tags=["assessment"])
+app.include_router(quiz_generation.router, prefix="/quiz-generation", tags=["quiz-generation"])
 
 
 @app.exception_handler(Exception)
