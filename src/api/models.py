@@ -799,3 +799,65 @@ class UpdateIntegrationRequest(BaseModel):
     access_token: str | None = None
     refresh_token: str | None = None
     expires_at: datetime | None = None
+
+
+# ============================================================
+# Bloom's Taxonomy Assessment Intelligence Engine Models
+# ============================================================
+
+class BloomsLevel(str, Enum):
+    REMEMBER = "remember"
+    UNDERSTAND = "understand"
+    APPLY = "apply"
+    ANALYZE = "analyze"
+    EVALUATE = "evaluate"
+    CREATE = "create"
+
+    def __str__(self):
+        return self.value
+
+    def __eq__(self, other):
+        if isinstance(other, str):
+            return self.value == other
+        elif isinstance(other, BloomsLevel):
+            return self.value == other.value
+        return False
+
+
+class BloomsDistribution(BaseModel):
+    remember: int = 20
+    understand: int = 20
+    apply: int = 20
+    analyze: int = 20
+    evaluate: int = 10
+    create: int = 10
+
+
+class BloomsGenerateRequest(BaseModel):
+    course_id: int
+    milestone_id: int
+    task_id: Optional[int] = None  # specific learning material task (optional)
+    num_questions: int = 10
+    difficulty: str = "medium"  # easy, medium, hard
+    question_types: List[str] = ["objective"]  # objective, subjective
+    bloom_distribution: BloomsDistribution = BloomsDistribution()
+
+
+class GeneratedBloomsQuestion(BaseModel):
+    question_text: str
+    blooms_level: str
+    options: Optional[List[str]] = None
+    correct_answer: str
+    explanation: str
+    source_reference: str
+    difficulty: str
+    question_type: str  # objective or subjective
+
+
+class BloomsAssessmentOutput(BaseModel):
+    questions: List[GeneratedBloomsQuestion]
+
+
+class BloomsVerifyRequest(BaseModel):
+    questions: List[GeneratedBloomsQuestion]
+    learning_material_content: str
