@@ -33,6 +33,7 @@ from api.models import (
     MarkTaskCompletedRequest,
     AssignmentRequest,
 )
+from api.keywords import trigger_keyword_extraction
 
 router = APIRouter()
 
@@ -69,6 +70,7 @@ async def publish_learning_material_task(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Task not found")
+    trigger_keyword_extraction(task_id)
     return result
 
 
@@ -85,6 +87,7 @@ async def update_learning_material_task(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Task not found")
+    trigger_keyword_extraction(task_id)
     return result
 
 
@@ -99,6 +102,7 @@ async def update_draft_quiz(task_id: int, request: UpdateDraftQuizRequest) -> Qu
     )
     if not result:
         raise HTTPException(status_code=404, detail="Task not found")
+    trigger_keyword_extraction(task_id)
     return result
 
 
@@ -114,6 +118,7 @@ async def update_published_quiz(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Task not found")
+    trigger_keyword_extraction(task_id)
     return result
 
 
@@ -174,6 +179,7 @@ async def create_assignment(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Task not found or assignment already exists")
+    trigger_keyword_extraction(task_id)
     return result
 
 
@@ -190,4 +196,5 @@ async def update_assignment(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Task not found or assignment does not exist")
+    trigger_keyword_extraction(task_id)
     return result

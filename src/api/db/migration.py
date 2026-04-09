@@ -231,5 +231,22 @@ async def cleanup_invalid_chat_history():
         await conn.commit()
 
 
+async def add_keywords_column_to_milestones():
+    """Migration: Add keywords column to milestones table for storing extracted keywords."""
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+
+        await cursor.execute(f"PRAGMA table_info({milestones_table_name})")
+        existing_columns = [col[1] for col in await cursor.fetchall()]
+
+        if "keywords" not in existing_columns:
+            await cursor.execute(
+                f"ALTER TABLE {milestones_table_name} ADD COLUMN keywords TEXT"
+            )
+
+        await conn.commit()
+
+
 async def run_migrations():
     await cleanup_invalid_chat_history()
+    await add_keywords_column_to_milestones()

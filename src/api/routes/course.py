@@ -17,6 +17,7 @@ from api.db.course import (
     swap_milestone_ordering_for_course as swap_milestone_ordering_for_course_in_db,
     swap_task_ordering_for_course as swap_task_ordering_for_course_in_db,
     duplicate_course_to_org,
+    get_keywords_for_milestone,
 )
 from api.db.cohort import (
     add_course_to_cohorts as add_course_to_cohorts_in_db,
@@ -40,6 +41,7 @@ from api.models import (
     SwapTaskOrderingRequest,
     CourseCohort,
     DuplicateCourseRequest,
+    MilestoneKeywordsResponse,
 )
 
 router = APIRouter()
@@ -162,3 +164,12 @@ async def swap_task_ordering(course_id: int, request: SwapTaskOrderingRequest):
 @router.post("/{course_id}/duplicate", response_model=CourseWithMilestonesAndTasks)
 async def duplicate_course(course_id: int, request: DuplicateCourseRequest):
     return await duplicate_course_to_org(course_id, request.org_id)
+
+
+@router.get(
+    "/{course_id}/milestones/{milestone_id}/keywords",
+    response_model=MilestoneKeywordsResponse,
+)
+async def get_milestone_keywords(course_id: int, milestone_id: int):
+    keywords = await get_keywords_for_milestone(milestone_id)
+    return {"milestone_id": milestone_id, "keywords": keywords}
