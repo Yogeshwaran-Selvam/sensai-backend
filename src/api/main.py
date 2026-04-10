@@ -29,6 +29,7 @@ from api.routes import (
     assessment,
     quiz_generation,
 )
+from api.routes import believer
 
 # from api.routes.ai import (
 #     resume_pending_task_generation_jobs,
@@ -138,6 +139,7 @@ app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
 app.include_router(integration.router, prefix="/integrations", tags=["integrations"])
 app.include_router(assessment.router, prefix="/assessment", tags=["assessment"])
 app.include_router(quiz_generation.router, prefix="/quiz-generation", tags=["quiz-generation"])
+app.include_router(believer.router, prefix="/believer", tags=["believer"])
 
 
 @app.exception_handler(Exception)
