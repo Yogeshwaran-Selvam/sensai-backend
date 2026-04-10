@@ -900,6 +900,64 @@ class ScenarioVerifyRequest(BaseModel):
     learning_material_content: str
 
 
+# --- Believer Mode (Adaptive Diagnostic Practice) ---
+
+
+class BelieverStartRequest(BaseModel):
+    course_id: int
+    milestone_id: int
+
+
+class BelieverTopicInfo(BaseModel):
+    keyword: str
+    status: str = "pending"  # pending, strong, moderate, basic, weak
+    current_difficulty: str = "hard"  # hard, medium, easy
+    attempts: int = 0
+    correct: int = 0
+
+
+class BelieverStartResponse(BaseModel):
+    topics: List[BelieverTopicInfo]
+    first_question: dict
+    current_topic_index: int
+    learning_content: str
+
+
+class BelieverNextRequest(BaseModel):
+    course_id: int
+    milestone_id: int
+    selected_option: str  # the learner's answer
+    correct_answer: str  # the actual correct answer
+    current_topic: str
+    current_difficulty: str  # difficulty of the question they just answered
+    was_correct: bool
+    remaining_topics: List[str]  # topics not yet attempted
+    questions_asked: int  # total questions asked so far
+
+
+class BelieverNextResponse(BaseModel):
+    is_session_complete: bool
+    next_question: Optional[dict] = None
+    next_topic: Optional[str] = None
+    next_difficulty: Optional[str] = None
+    topic_result: Optional[dict] = None  # result of topic that just concluded
+    feedback: str  # feedback for the answer they just gave
+
+
+class BelieverReportRequest(BaseModel):
+    module_name: str
+    topic_results: List[dict]
+    correct_count: int
+    total_count: int
+
+
+class BelieverReportResponse(BaseModel):
+    overall_assessment: str
+    study_recommendations: List[str]
+    topic_mastery: List[dict]
+    overall_score: float
+
+
 class ExtractKeywordsResponse(BaseModel):
     keywords: List[str]
 
