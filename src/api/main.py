@@ -28,6 +28,7 @@ from api.routes import (
     integration,
     assessment,
     quiz_generation,
+    recruiter,
 )
 
 # from api.routes.ai import (
@@ -138,6 +139,7 @@ app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
 app.include_router(integration.router, prefix="/integrations", tags=["integrations"])
 app.include_router(assessment.router, prefix="/assessment", tags=["assessment"])
 app.include_router(quiz_generation.router, prefix="/quiz-generation", tags=["quiz-generation"])
+app.include_router(recruiter.router, prefix="/recruiter", tags=["recruiter"])
 
 
 @app.exception_handler(Exception)

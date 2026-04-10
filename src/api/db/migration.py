@@ -28,6 +28,7 @@ from api.config import (
     integrations_table_name,
     assignment_table_name,
     quiz_generation_configs_table_name,
+    recruiter_mcq_generations_table_name,
 )
 
 
@@ -282,7 +283,19 @@ async def create_or_recreate_quiz_generation_configs():
             await conn.commit()
 
 
+async def ensure_recruiter_mcq_generations_table():
+    from api.db.recruiter import create_recruiter_generations_table
+    from api.db.recruiter_test import create_recruiter_tests_tables
+
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+        await create_recruiter_generations_table(cursor)
+        await create_recruiter_tests_tables(cursor)
+        await conn.commit()
+
+
 async def run_migrations():
     await cleanup_invalid_chat_history()
     await add_keywords_column_to_milestones()
     await create_or_recreate_quiz_generation_configs()
+    await ensure_recruiter_mcq_generations_table()

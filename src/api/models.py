@@ -917,6 +917,228 @@ class JobDescription(BaseModel):
 class JobDescriptionResponse(BaseModel):
     jobs: List[JobDescription]
 
+
+# --- Recruiter MCQ workflow ---
+
+
+class RecruiterFlow(str, Enum):
+    from_suggested = "from_suggested"
+    own_jd = "own_jd"
+    jd_resume = "jd_resume"
+
+
+class RecruiterJDType(str, Enum):
+    structured = "structured"
+    unstructured = "unstructured"
+
+
+class RecruiterQuestionType(str, Enum):
+    mcq = "mcq"
+    code = "code"
+    text = "text"
+
+
+class RecruiterDifficulty(str, Enum):
+    easy = "easy"
+    medium = "medium"
+    hard = "hard"
+    mixed = "mixed"
+
+
+class JDClassification(BaseModel):
+    type: RecruiterJDType
+    confidence: float
+    extracted_skills: List[str]
+    inferred_role: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class SynthesizedJD(BaseModel):
+    title: str
+    description: str
+    responsibilities: List[str]
+    required_skills: List[str]
+    nice_to_have: List[str] = []
+
+
+class ExtractedSkill(BaseModel):
+    name: str
+    category: Literal["language", "framework", "tool", "cloud", "database", "concept", "soft", "other"] = "other"
+    importance: int = 3  # 1-5
+
+
+class ExtractedSkillList(BaseModel):
+    skills: List[ExtractedSkill]
+
+
+class ResumeSkill(BaseModel):
+    name: str
+    proficiency: float = 0.4  # 0..1
+
+
+class ParsedResume(BaseModel):
+    skills: List[ResumeSkill]
+    total_experience_years: Optional[int] = 0
+    summary: Optional[str] = ""
+    highlights: List[str] = []
+
+
+class WeightedSkill(BaseModel):
+    skill: str
+    weight: float  # 0..1 normalized
+
+
+class RecruiterMCQOption(BaseModel):
+    text: str
+
+
+class RecruiterQuestion(BaseModel):
+    type: RecruiterQuestionType
+    skill: str
+    difficulty: RecruiterDifficulty
+    bloom_level: Literal[
+        "remember", "understand", "apply", "analyze", "evaluate", "create"
+    ] = "understand"
+    question: str
+    # MCQ fields
+    options: Optional[List[str]] = None
+    correct_index: Optional[int] = None
+    # Code fields
+    language: Optional[str] = None
+    starter_code: Optional[str] = None
+    expected_solution: Optional[str] = None
+    # Text / rationale fields
+    expected_answer: Optional[str] = None
+    rationale: Optional[str] = None
+
+
+class RecruiterQuestionSet(BaseModel):
+    questions: List[RecruiterQuestion]
+
+
+class ValidatorReport(BaseModel):
+    ok: bool
+    issues: List[str] = []
+    questions_to_regenerate: List[int] = []
+    missing_skills: List[str] = []
+
+
+class RecruiterGenerationStatus(str, Enum):
+    pending = "pending"
+    parsing = "parsing"
+    classifying = "classifying"
+    synthesizing = "synthesizing"
+    awaiting_confirmation = "awaiting_confirmation"
+    extracting_skills = "extracting_skills"
+    generating = "generating"
+    validating = "validating"
+    done = "done"
+    failed = "failed"
+
+
+class GenerateFromSuggestedRequest(BaseModel):
+    org_id: int
+    jd_title: str
+    jd_description: str
+    jd_responsibilities: List[str] = []
+    jd_skills: List[str] = []
+    num_questions: int = 10
+    difficulty: RecruiterDifficulty = RecruiterDifficulty.mixed
+    type_mix: Dict[RecruiterQuestionType, int] = {
+        RecruiterQuestionType.mcq: 6,
+        RecruiterQuestionType.code: 2,
+        RecruiterQuestionType.text: 2,
+    }
+
+
+class ConfirmSynthesizedJDRequest(BaseModel):
+    jd: Optional[SynthesizedJD] = None  # present only for unstructured flow
+    num_questions: int = 10
+    difficulty: RecruiterDifficulty = RecruiterDifficulty.mixed
+    type_mix: Dict[RecruiterQuestionType, int] = {
+        RecruiterQuestionType.mcq: 6,
+        RecruiterQuestionType.code: 2,
+        RecruiterQuestionType.text: 2,
+    }
+
+
+class UpdateQuestionsRequest(BaseModel):
+    questions: List[RecruiterQuestion]
+
+
+class PublishTestRequest(BaseModel):
+    title: str
+    questions: Optional[List[RecruiterQuestion]] = None  # if None, use current generation questions
+
+
+class PublishedTestSummary(BaseModel):
+    id: int
+    test_code: str
+    title: str
+    org_id: int
+    question_count: int
+    created_at: Optional[datetime] = None
+
+
+class StartAttemptRequest(BaseModel):
+    candidate_name: str
+    candidate_email: str
+
+
+class AttemptAnswer(BaseModel):
+    question_index: int
+    mcq_selected_index: Optional[int] = None
+    text_answer: Optional[str] = None
+    code_answer: Optional[str] = None
+
+
+class SubmitAttemptRequest(BaseModel):
+    answers: List[AttemptAnswer]
+
+
+class ReviewVerdict(str, Enum):
+    approved = "approved"
+    rejected = "rejected"
+
+    def __str__(self):
+        return self.value
+
+    def __eq__(self, other):
+        if isinstance(other, str):
+            return self.value == other
+        elif isinstance(other, ReviewVerdict):
+            return self.value == other.value
+        return False
+
+
+class ReviewAnswerRequest(BaseModel):
+    question_index: int
+    verdict: ReviewVerdict
+    feedback: Optional[str] = None
+
+
+class ReviewMultipleAnswersRequest(BaseModel):
+    reviews: List[ReviewAnswerRequest]
+
+
+class RecruiterGenerationRecord(BaseModel):
+    id: int
+    org_id: int
+    flow: RecruiterFlow
+    status: RecruiterGenerationStatus
+    jd_type: Optional[RecruiterJDType] = None
+    jd_text: Optional[str] = None
+    resume_text: Optional[str] = None
+    synthesized_jd: Optional[SynthesizedJD] = None
+    extracted_skills: Optional[List[ExtractedSkill]] = None
+    weighted_skills: Optional[List[WeightedSkill]] = None
+    questions: Optional[List[RecruiterQuestion]] = None
+    validator_report: Optional[ValidatorReport] = None
+    error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 # --- Quiz Generation ---
 
 

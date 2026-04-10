@@ -61,6 +61,9 @@ integrations_table_name = "integrations"
 bq_sync_table_name = "bq_sync"
 assignment_table_name = "assignment"
 quiz_generation_configs_table_name = "quiz_generation_configs"
+recruiter_mcq_generations_table_name = "recruiter_mcq_generations"
+recruiter_tests_table_name = "recruiter_tests"
+recruiter_test_attempts_table_name = "recruiter_test_attempts"
 
 UPLOAD_FOLDER_NAME = "uploads"
 
