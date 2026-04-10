@@ -864,6 +864,40 @@ class BloomsVerifyRequest(BaseModel):
     learning_material_content: str
 
 
+# --- Scenario Mode ---
+
+
+class ScenarioGenerateRequest(BaseModel):
+    course_id: int
+    milestone_id: int
+    task_id: Optional[int] = None
+    num_questions: int = 8
+    difficulty: str = "medium"  # easy, medium, hard
+    question_types: List[str] = ["objective"]  # objective, subjective
+
+
+class GeneratedScenarioQuestion(BaseModel):
+    question_text: str
+    options: Optional[List[str]] = None
+    correct_answer: str
+    explanation: str
+    concept_tested: str  # which concept from the learning material is being tested
+    difficulty: str
+    question_type: str  # objective or subjective
+
+
+class ScenarioAssessmentOutput(BaseModel):
+    scenario_narrative: str  # the scenario story
+    scenario_title: str  # short title for the scenario
+    questions: List[GeneratedScenarioQuestion]
+
+
+class ScenarioVerifyRequest(BaseModel):
+    questions: List[GeneratedScenarioQuestion]
+    scenario_narrative: str
+    learning_material_content: str
+
+
 class ExtractKeywordsResponse(BaseModel):
     keywords: List[str]
 

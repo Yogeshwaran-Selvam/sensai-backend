@@ -14,10 +14,15 @@ from api.models import (
     BloomsAssessmentOutput,
     GeneratedBloomsQuestion,
     BloomsVerifyRequest,
+    ScenarioGenerateRequest,
+    ScenarioAssessmentOutput,
+    GeneratedScenarioQuestion,
+    ScenarioVerifyRequest,
     TaskType,
 )
 from api.prompts import compile_prompt
 from api.prompts.blooms_taxonomy import BLOOMS_SYSTEM_PROMPT, BLOOMS_USER_PROMPT
+from api.prompts.scenario_mode import SCENARIO_SYSTEM_PROMPT, SCENARIO_USER_PROMPT
 from api.config import openai_plan_to_model_name
 from api.utils.logging import logger
 
@@ -300,7 +305,7 @@ async def verify_generated_questions(request: BloomsVerifyRequest):
 
     try:
         result = await run_llm_with_openai(
-            model=openai_plan_to_model_name["text-mini"],  # Fast, cheap model for verification
+            model=openai_plan_to_model_name["text-mini"],
             messages=messages,
             response_model=VerificationOutput,
             max_output_tokens=4096,
@@ -308,4 +313,185 @@ async def verify_generated_questions(request: BloomsVerifyRequest):
         return result.model_dump()
     except Exception as e:
         logger.error(f"Error verifying questions: {e}")
+        raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
+
+
+# ============================================================
+# Scenario Mode: Pydantic models for LLM structured output
+# ============================================================
+
+class LLMScenarioQuestion(BaseModel):
+    question_text: str = Field(description="The question text, set in the context of the scenario")
+    options: Optional[List[str]] = Field(
+        default=None,
+        description="For objective/MCQ questions: exactly 4 answer options. For subjective: null.",
+    )
+    correct_answer: str = Field(
+        description="The correct answer text. For MCQ, this must exactly match one of the options."
+    )
+    explanation: str = Field(
+        description="Explanation connecting the correct answer back to both the scenario AND the underlying concept."
+    )
+    concept_tested: str = Field(
+        description="Which concept from the learning material this question tests."
+    )
+    difficulty: str = Field(description="easy, medium, or hard")
+    question_type: str = Field(description="objective or subjective")
+
+
+class LLMScenarioOutput(BaseModel):
+    scenario_title: str = Field(
+        description="A short, catchy title for the scenario (e.g., 'The Server Meltdown at TechCorp')"
+    )
+    scenario_narrative: str = Field(
+        description="A 2-4 paragraph compelling scenario narrative that contextualizes the learning material concepts in a realistic situation."
+    )
+    questions: List[LLMScenarioQuestion] = Field(
+        description="The list of generated scenario-based questions"
+    )
+
+
+class ScenarioVerificationResult(BaseModel):
+    question_index: int = Field(description="The 0-based index of the question being verified")
+    status: str = Field(description="verified, warning, or wrong")
+    reason: str = Field(
+        description="Explanation for the verification status."
+    )
+    correct_answer_suggestion: Optional[str] = Field(
+        default=None,
+        description="If the original correct answer is wrong, suggest the actual correct answer.",
+    )
+
+
+class ScenarioVerificationOutput(BaseModel):
+    results: List[ScenarioVerificationResult] = Field(
+        description="Verification results for each question"
+    )
+
+
+# ============================================================
+# Route: Generate Scenario-Based Assessment (Streaming)
+# ============================================================
+
+@router.post("/generate-scenario")
+async def generate_scenario_assessment(request: ScenarioGenerateRequest):
+    """
+    Generates a scenario narrative + questions from module content.
+    Streams the response back as NDJSON for real-time rendering.
+    """
+
+    # 1. Extract learning material content
+    content = await get_module_learning_content(
+        request.course_id, request.milestone_id, request.task_id
+    )
+
+    logger.info(
+        f"Generating scenario assessment: {request.num_questions} questions, "
+        f"difficulty={request.difficulty}, "
+        f"from {len(content)} chars of content"
+    )
+
+    # 2. Build the prompt
+    question_types_str = ", ".join(request.question_types)
+    messages = compile_prompt(
+        SCENARIO_SYSTEM_PROMPT,
+        SCENARIO_USER_PROMPT,
+        learning_material_content=content,
+        num_questions=str(request.num_questions),
+        difficulty=request.difficulty,
+        question_types=question_types_str,
+    )
+
+    # 3. Stream the LLM response
+    async def stream_generation() -> AsyncGenerator[str, None]:
+        try:
+            async for chunk in stream_llm_with_openai(
+                model=openai_plan_to_model_name["text"],
+                messages=messages,
+                response_model=LLMScenarioOutput,
+                max_output_tokens=8192,
+            ):
+                if chunk and hasattr(chunk, "model_dump"):
+                    yield json.dumps(chunk.model_dump()) + "\n"
+        except Exception as e:
+            if str(e) == "'AsyncStream' object has no attribute 'aclose'":
+                pass
+            else:
+                logger.error(f"Error generating scenario assessment: {e}")
+                error_payload = {"error": str(e)}
+                yield json.dumps(error_payload) + "\n"
+
+    return StreamingResponse(
+        stream_generation(),
+        media_type="application/x-ndjson",
+    )
+
+
+# ============================================================
+# Route: Verify scenario-based questions with a second AI agent
+# ============================================================
+
+SCENARIO_VERIFY_SYSTEM_PROMPT = """You are a Scenario-Based Assessment Quality Assurance expert. You verify quiz questions
+that were generated within a specific scenario context.
+
+For EACH question, verify:
+1. **Scenario Relevance**: Does the question genuinely relate to the scenario, or is it a generic textbook question?
+2. **Factual Accuracy**: Is the correct answer actually correct based on the learning material?
+3. **Option Quality** (for MCQs): Are the distractor options plausible within the scenario? Are there accidentally TWO correct answers?
+4. **Concept Testing**: Does the question actually test the claimed concept from the learning material?
+5. **Clarity**: Is the question clear and unambiguous in the scenario context?
+
+Return a verification result for EACH question with status:
+- "verified" — The question passes all checks.
+- "warning" — The question has minor issues but is usable.
+- "wrong" — The question has critical issues.
+
+Include a clear reason for every status."""
+
+SCENARIO_VERIFY_USER_PROMPT = """Original Learning Material:
+<learning_material>
+{{learning_material_content}}
+</learning_material>
+
+Scenario Narrative:
+<scenario>
+{{scenario_narrative}}
+</scenario>
+
+Questions to verify:
+<questions>
+{{questions_json}}
+</questions>
+
+Verify each question and return results."""
+
+
+@router.post("/verify-scenario-questions")
+async def verify_scenario_questions(request: ScenarioVerifyRequest):
+    """
+    Runs the Validator agent on scenario-based questions.
+    Checks for scenario relevance, factual accuracy, and concept alignment.
+    """
+    questions_json = json.dumps(
+        [q.model_dump() for q in request.questions], indent=2
+    )
+
+    messages = compile_prompt(
+        SCENARIO_VERIFY_SYSTEM_PROMPT,
+        SCENARIO_VERIFY_USER_PROMPT,
+        learning_material_content=request.learning_material_content,
+        scenario_narrative=request.scenario_narrative,
+        questions_json=questions_json,
+    )
+
+    try:
+        result = await run_llm_with_openai(
+            model=openai_plan_to_model_name["text-mini"],
+            messages=messages,
+            response_model=ScenarioVerificationOutput,
+            max_output_tokens=4096,
+        )
+        return result.model_dump()
+    except Exception as e:
+        logger.error(f"Error verifying scenario questions: {e}")
         raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
