@@ -737,6 +737,11 @@ async def init_db():
 
             await create_quiz_generation_configs_table(cursor)
 
+            from api.db.recruiter import create_recruiter_generations_table
+            from api.db.recruiter_test import create_recruiter_tests_tables
+            await create_recruiter_generations_table(cursor)
+            await create_recruiter_tests_tables(cursor)
+
             await conn.commit()
 
         except Exception as exception:

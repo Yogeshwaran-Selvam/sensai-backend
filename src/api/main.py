@@ -28,6 +28,7 @@ from api.routes import (
     integration,
     assessment,
     quiz_generation,
+    recruiter,
 )
 from api.routes import believer
 
@@ -140,7 +141,7 @@ app.include_router(integration.router, prefix="/integrations", tags=["integratio
 app.include_router(assessment.router, prefix="/assessment", tags=["assessment"])
 app.include_router(quiz_generation.router, prefix="/quiz-generation", tags=["quiz-generation"])
 app.include_router(believer.router, prefix="/believer", tags=["believer"])
-
+app.include_router(recruiter.router, prefix="/recruiter", tags=["recruiter"])
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
