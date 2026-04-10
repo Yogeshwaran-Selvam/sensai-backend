@@ -942,3 +942,34 @@ class QuizGenerationResponse(BaseModel):
     org_id: int
     status: str
     created_at: str
+
+
+class QuizGenBloomsDistribution(BaseModel):
+    remember: int = 20
+    understand: int = 20
+    apply: int = 20
+    analyze: int = 20
+    evaluate: int = 10
+    create: int = 10
+
+
+class GenerateQuestionsRequest(BaseModel):
+    course_title: str
+    module_title: str
+    purpose: QuizGenerationPurpose
+    length: int
+    difficulty: QuizGenerationDifficulty
+    question_type: QuizGenQuestionType
+    answer_type: QuizGenAnswerType
+    topic_weights: List[TopicWeight]
+    bloom_distribution: Optional[QuizGenBloomsDistribution] = None
+
+
+class RegenerateQuestionRequest(BaseModel):
+    topic: str
+    blooms_level: str
+    course_title: str
+    module_title: str
+    difficulty: QuizGenerationDifficulty
+    question_type: QuizGenQuestionType
+    answer_type: QuizGenAnswerType
