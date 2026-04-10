@@ -184,10 +184,13 @@ async def generate_blooms_assessment(request: BloomsGenerateRequest):
     Streams the response back to the frontend as NDJSON for real-time rendering.
     """
 
-    # 1. Extract learning material content
-    content = await get_module_learning_content(
-        request.course_id, request.milestone_id, request.task_id
-    )
+    # 1. Use pre-fetched content if provided, otherwise fetch from DB
+    if request.learning_material_content:
+        content = request.learning_material_content
+    else:
+        content = await get_module_learning_content(
+            request.course_id, request.milestone_id, request.task_id
+        )
 
     logger.info(
         f"Generating Bloom's assessment: {request.num_questions} questions, "
@@ -380,10 +383,13 @@ async def generate_scenario_assessment(request: ScenarioGenerateRequest):
     Streams the response back as NDJSON for real-time rendering.
     """
 
-    # 1. Extract learning material content
-    content = await get_module_learning_content(
-        request.course_id, request.milestone_id, request.task_id
-    )
+    # 1. Use pre-fetched content if provided, otherwise fetch from DB
+    if request.learning_material_content:
+        content = request.learning_material_content
+    else:
+        content = await get_module_learning_content(
+            request.course_id, request.milestone_id, request.task_id
+        )
 
     logger.info(
         f"Generating scenario assessment: {request.num_questions} questions, "

@@ -842,6 +842,7 @@ class BloomsGenerateRequest(BaseModel):
     difficulty: str = "medium"  # easy, medium, hard
     question_types: List[str] = ["objective"]  # objective, subjective
     bloom_distribution: BloomsDistribution = BloomsDistribution()
+    learning_material_content: Optional[str] = None  # pre-fetched content to skip DB lookup
 
 
 class GeneratedBloomsQuestion(BaseModel):
@@ -874,6 +875,7 @@ class ScenarioGenerateRequest(BaseModel):
     num_questions: int = 8
     difficulty: str = "medium"  # easy, medium, hard
     question_types: List[str] = ["objective"]  # objective, subjective
+    learning_material_content: Optional[str] = None  # pre-fetched content to skip DB lookup
 
 
 class GeneratedScenarioQuestion(BaseModel):
